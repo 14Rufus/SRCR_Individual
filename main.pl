@@ -26,6 +26,16 @@ comprimento(S,N) :- length(S,N).
 
 estaVazia(L,V) :- comprimento(L,V),nao(V>0).
 
+%encontra o menor elemento 
+minimo(L, (A,B)) :-
+    seleciona((A,B), L, R),
+    \+ ( membro((A1,B1), R), B1 < B ).
+
+%encontra o maior elemento 
+maximo(L, (A,B)) :-
+    seleciona((A,B), L, R),
+    \+ ( membro((A1,B1), R), B1 > B ).
+
 imprime([]).
 imprime([X|T]) :- write(X), nl, imprime(T).
 
@@ -41,8 +51,33 @@ reverseL([D|Ds],Es,Fs) :- reverseL(Ds, [D|Es], Fs).
 
 getLixo(Local, Tipo) :- pontos_recolha(_,_,Local,Tipo,_,_).
 
+
+estimativa(Nodo,Est):-
+    distance(Nodo, Est).
+
+
+%Calcula a distancia até ao nodo final
+distance(Origem,Dis):-
+    pontos_recolha(Lat1,Lon1,Origem,_,_,_),
+    final(Destino),
+    pontos_recolha(Lat2,Lon2,Destino,_,_,_),
+    P is 0.017453292519943295,
+    A is (0.5 - cos((Lat2 - Lat1) * P) / 2 + cos(Lat1 * P) * cos(Lat2 * P) * (1 - cos((Lon2 - Lon1) * P)) / 2),
+    Dis is (12742 * asin(sqrt(A))).
+
 seleciona(E, [E|Xs],Xs).
 seleciona(E, [X|Xs], [X|Ys]) :- seleciona(E, Xs, Ys).
+
+
+estender([No|Caminho],NovosCaminhos, CustoArco) :-
+    findall([NovoNo,No|Caminho],
+    (adjacente(No,NovoNo,CustoArco), + membro(NovoNo,[No|Caminho])),
+    NovosCaminhos).
+
+estender([No|Caminho],NovosCaminhos) :-
+    findall([NovoNo,No|Caminho],
+        (adjacente(No,NovoNo,_), \+ membro(NovoNo,[No|Caminho])),
+        NovosCaminhos).
 
 % --------------------------------------------------- Trabalho Individual -----------------------------------------------------------
 
@@ -68,6 +103,8 @@ depthFirst(Nodo, Historico, [NodoProx|Caminho]):-
 
 solveDepthFirstAll(L):- findall((S,C), (solveDepthFirst(S), comprimento(S,C)),L).
 
+menorNArcosDP(Nodo,Caminho,NA):- findall((Ca,N), (resolveDP(Ca), length(Ca,N)),L),minimo(L,(Caminho,NA)).
+maiorNArcosDP(Nodo,Caminho,NA):- findall((Ca,N), (resolveDP(Ca), length(Ca,N)),L),maximo(L,(Caminho,NA)).
 
 % --------------------------------------------------- DFS - Profundidade com Custos ----------------------------------------------------------- 
 
@@ -87,6 +124,35 @@ depthFirstC(Nodo, Historico, [NodoProx|Caminho], Custo):-
     Custo is CustoArco + CustoAux.
 
 
+melhor(Nodo,Caminho,Custo):- findall((Ca,Cus), (resolveDPC(Ca,Cus)), L),minimo(L,(Caminho,Custo)).
+pior(Nodo,Caminho,Custo):- findall((Ca,Cus), (resolveDPC(Ca,Cus)), L),maximo(L,(Caminho,Custo)).
+
+
+%----------------------------Depth First Produtividade ------------------------
+
+resolveDPProdutividade([Nodo|Caminho], Custo):-
+    inicial(Nodo),
+    depthFirstP(Nodo,[Nodo], Caminho, Custo).
+
+depthFirstP(Nodo, , [], 0):-
+    final(Nodo).
+
+depthFirstP(Nodo, Historico, [NodoProx|Caminho], Custo):-
+    adjacente(Nodo, NodoProx,),
+    calculaP(NodoProx, CustoArco),
+    nao(membro(NodoProx, Historico)),
+    depthFirstP(NodoProx, [NodoProx|Historico], Caminho, CustoAux),
+    Custo is CustoArco + CustoAux.
+
+totalLixo([],0).
+totalLixo([X|T],Tx):- totalLixo(T,Ty), Tx is X + Ty.
+
+calculaP(Nodo,Total) :- findall(C,pontosrecolha(,,Nodo,,C,_),R),totalLixo(R,Total).
+
+maisLixo(Nodo,Cam,Custo):- findall((Ca,Cus), (resolveDPProdutividade(Ca,Cus)), L),maximo(L,(Cam,Custo)).
+
+
+
 % ------------------------------------------------ DFS Tipos -------------------------------------------------------------------
 
 solveDepthFirstT([Nodo|Caminho], Tipo):-
@@ -103,6 +169,104 @@ depthFirstT(Nodo, Historico, [NodoProx|Caminho], Tipo):-
     depthFirstT(NodoProx, [NodoProx|Historico], Caminho, Tipo).
 
 solveDepthFirstTAll(L,T):- findall((S,C), (solveDepthFirstT(S, T), comprimento(S,C)),L).
+
+menorNArcosDPT(Tipo,Cam,NA):- findall((Ca,N), (solveDepthFirstT(Ca,Tipo), length(Ca,N)),L),minimo(L,(Cam,NA)).
+maiorNArcosDPT(Tipo,Cam,NA):- findall((Ca,N), (solveDepthFirstT(Ca,Tipo), length(Ca,N)),L),maximo(L,(Cam,NA)).
+
+
+%%----------------------Depth first limitada -------------------------
+
+
+menorNArcosDPlimitada(Limite,Cam,NA):- findall((Ca,N), (resolveDPlimitada(Ca,Limite), length(Ca,N)),L),minimo(L,(Cam,NA)).
+maiorNArcosDPlimitada(Limite,Cam,NA):- findall((Ca,N), (resolveDPlimitada(Ca,Limite), length(Ca,N)),L),maximo(L,(Cam,NA)).
+
+resolveDPlimitadaAll(L,Size):- findall((S,C), (resolveDPlimitada(S,Size), length(S,C)), L).
+
+resolveDPlimitada(Solucao,L) :-
+    inicial(No),
+    depthFirstLimited([],No,Sol,L),
+    reverseL(Sol,Solucao).
+
+depthFirstLimited(Caminho,No,[No|Caminho],) :-
+    final(No),!.
+
+depthFirstLimited(Caminho,No,S,L) :-
+    L > 0,
+    adjacente(No,No1,),
+    \+ membro(No1,Caminho),
+    L1 is L - 1,
+    depthFirstLimited([No|Caminho],No1,S,L1).
+
+
+%%---------------------Depth first limitada custo ------------------
+
+
+melhorDPlimitada(Limite,Cam,Custo):- findall((Ca,Cus), (resolveDPlimitadaC(Ca,Limite,Cus)),L),minimo(L,(Cam,Custo)).
+piorDPlimitada(Limite,Cam,Custo):- findall((Ca,Cus), (resolveDPlimitadaC(Ca,Limite,Cus)),L),maximo(L,(Cam,Custo)).
+
+resolveDPlimitadaCostAll(L,Size) :- findall((S,C,Cost), (resolveDPlimitadaC(S,Size,Cost), comprimento(S,C)), L).
+
+resolveDPlimitadaC(Solucao,L,Custo) :-
+    inicial(No),
+    depthFirstLimitedC([],No,Sol,L,Custo),
+    reverseL(Sol,Solucao).
+
+
+
+depthFirstLimitedC(Caminho,No,[No|Caminho],L,0) :-
+    final(No),!.
+
+depthFirstLimitedC(Caminho,No,S,L, Custo) :-
+    L > 0,
+    adjacente(No,No1,CustoArco),
+    \+ membro(No1,Caminho),
+    L1 is L - 1,
+    depthFirstLimitedC([No|Caminho],No1,S,L1, CustoAux),
+    Custo is CustoArco + CustoAux.
+
+
+
+%--------------------------------------------DPF limitada custos produtiva----------------------------------
+
+resolveDPlimitadaCProd(Solucao,L,Custo) :-
+    inicial(No),
+    depthFirstLimitedCP([],No,Sol,L,Custo),
+    reverseL(Sol,Solucao).
+
+
+
+depthFirstLimitedCP(Caminho,No,[No|Caminho],L,0) :-
+    final(No),!.
+
+depthFirstLimitedCP(Caminho,No,S,L, Custo) :-
+    L > 0,
+    adjacente(No,No1,_),
+    pontosrecolha(,,No1,,CustoArco,_).
+    \+ membro(No1,Caminho),
+    L1 is L - 1,
+    depthFirstLimitedCP([No|Caminho],No1,S,L1, CustoAux),
+    Custo is CustoArco + CustoAux.
+
+
+%-----------------------Depth First Limitada Tipos ----------------------------
+
+
+resolveDPlimitadaTipo(Solucao,L, Tipo) :-
+    inicial(No),
+    depthFirstLimitedT([],No,Sol,L,Tipo),
+    reverseL(Sol,Solucao).
+
+depthFirstLimitedT(Caminho,No,[No|Caminho],L, Tipo) :-
+    final(No),!.
+
+depthFirstLimitedT(Caminho,No,S,L,Tipo) :-
+    L > 0,
+    getLixo(No1, Tipo),
+    adjacente(No,No1,_),
+    \+ membro(No1,Caminho),
+    L1 is L - 1,
+    depthFirstLimitedT([No|Caminho],No1,S,L1,Tipo).
+
 
 % --------------------------------------------------- BFS - Largura ----------------------------------------------------------- 
 
@@ -121,97 +285,32 @@ breadthFirst([Caminho|Caminhos],Solucao) :-
     append(Caminhos,NovosCaminhos,Caminhos1),
     breadthFirst(Caminhos1,Solucao).
 
-estender([No|Caminho],NovosCaminhos) :-
-    findall([NovoNo,No|Caminho],
-        (adjacente(No,NovoNo,_), \+ membro(NovoNo,[No|Caminho])),
-        NovosCaminhos).
-
-%resolveBFSAll(L) :- findall((S,C), (resolveBFS(S,C)), L).
+resolveBFSAll(L) :- findall((S,C), (resolveBFS(S,C)), L).
 
 
 % --------------------------------------------------- BFS - Largura Custos ----------------------------------------------------------- 
 
 %NÃO ESTÁ A FUNCIONAR
 
-resolveBFScusto(No,Solucao, Custo) :-
+resolveBFScusto(Solucao, Custo) :-
     inicial(No),
-    breadthFirstC([[No]],Sol, Custo),
-    reverseL(Sol,Solucao).
+    breadthFirstC([[No]],Sol),
+    reverseL(Solucao, Custo).
 
-breadthFirstC([[No|Caminho]|_],[No|Caminho], 0) :-
+breadthFirstC2([[No|Caminho]|_],[No|Caminho]) :-
     final(No).
 
-breadthFirstC([Caminho|Caminhos],Solucao, Custo) :-
-    extender(Caminho,NovosCaminhos,CustoArco),
+breadthFirstC2([Caminho|Caminhos],Solucao) :-
+    estender(Caminho,NovosCaminhos),
     append(Caminhos,NovosCaminhos,Caminhos1),
-    breadthFirstC(Caminhos1,Solucao, CustoAux),
-    Custo is CustoArco + CustoAux.
+    breadthFirstC2(Caminhos1,Solucao),
 
-extender([No|Caminho],NovosCaminhos, CustoArco) :-
-    findall([NovoNo,No|Caminho],
-    (adjacente(No,NovoNo,CustoArco), + membro(NovoNo,[No|Caminho])),
-    NovosCaminhos).
-
-
-% ----------------------------------------- Busca Iterativa Limitada em Profundidade ----------------------------------------------------------- 
-
-
-resolveDPlimitada(Solucao,L) :-
-    inicial(No),
-    depthFirstLimited([],No,Sol,L),
-    reverseL(Sol,Solucao).
-
-depthFirstLimited(Caminho,No,[No|Caminho],_) :-
-    final(No),!.
-
-depthFirstLimited(Caminho,No,S,L) :-
-    L > 0,
-    adjacente(No,No1,_),
-    \+ membro(No1,Caminho),
-    L1 is L - 1,
-    depthFirstLimited([No|Caminho],No1,S,L1).
-
-resolveDPlimitadaAll(R,Size):- findall((S,C), (resolveDPlimitada(S,Size), comprimento(S,C)),R).
-
-% -------------------------------------- Busca Iterativa Limitada em Profundidade com Custos ----------------------------------------------------------- 
-
-resolveDPlimitadaC(Solucao,L,Custo) :-
-    inicial(No),
-    depthFirstLimitedC([],No,Sol,L,Custo),
-    reverseL(Sol,Solucao).
-
-depthFirstLimitedC(Caminho,No,[No|Caminho],L,0) :-
-    final(No),!.
-
-depthFirstLimitedC(Caminho,No,S,L, Custo) :-
-    L > 0,
-    adjacente(No,No1,CustoArco),
-    \+ membro(No1,Caminho),
-    L1 is L - 1,
-    depthFirstLimitedC([No|Caminho],No1,S,L1, CustoAux),
-    Custo is CustoArco + CustoAux.
-
-solveDepthFirstLimitedCostAll(L,Size,Custo) :- 
-    findall((S,C,Cost), (resolveDPlimitadaC(S,Size,Cost), comprimento(S,C)), L).
-
-
-% -------------------------------------- Busca Iterativa Limitada em Profundidade com Tipos ----------------------------------------------------------- 
-
-solveDPlimitadaT(Solucao,L, Tipo) :-
-    inicial(No),
-    depthFirstLimitedT([],No,Sol,L,Tipo),
-    reverseL(Sol,Solucao).
-
-depthFirstLimitedT(Caminho,No,[No|Caminho],L, Tipo) :-
-    final(No),!.
-
-depthFirstLimitedT(Caminho,No,S,L,Tipo) :-
-    L > 0,
-    getLixo(No1, Tipo),
-    adjacente(No,No1,_),
-    \+ membro(No1,Caminho),
-    L1 is L - 1,
-    depthFirstLimitedT([No|Caminho],No1,S,L1,Tipo).
+custoTotal([],0).
+custoTotal([No],0).
+custoTotal([No1,No2|Caminho],Custo) :-
+    adjacente(No1,No2,CustoArco),
+    custoTotal([No2|Caminho],CustoResto),
+    Custo is CustoArco + CustoResto.
 
 % ----------------------------------------------------- Gulosa ----------------------------------------------------------- 
 
@@ -249,18 +348,6 @@ adjacenteG([Nodo|Caminho]/Custo/_, [ProxNodo,Nodo|Caminho]/NovoCusto/Est) :-
     NovoCusto is Custo + PassoCusto,
     estimativa(ProxNodo, Est).
 
-estimativa(Nodo,Est):-
-    distance(Nodo, Est).
-
-distance(Origem,Dis):-
-    pontos_recolha(Lat1,Lon1,Origem,_,_,_),
-    final(Destino),
-    pontos_recolha(Lat2,Lon2,Destino,_,_,_),
-    P is 0.017453292519943295,
-    A is (0.5 - cos((Lat2 - Lat1) * P) / 2 + cos(Lat1 * P) * cos(Lat2 * P) * (1 - cos((Lon2 - Lon1) * P)) / 2),
-    Dis is (12742 * asin(sqrt(A))).
-
-
 % ---------------------------------------------- Gulosa com tipos----------------------------------------------------------- 
 
 resolveGulosaT(Nodo,Caminho/Custo,Tipo):-
@@ -292,14 +379,18 @@ adjacenteGT([Nodo|Caminho]/Custo/_,[ProxNodo,Nodo|Caminho]/NovoCusto/Est,Tipo):-
 
 % ----------------------------------------------------- A* ----------------------------------------------------------- 
 
-resolveAEstrela(Nodo, Caminho/Custo) :-
-    estimativa(Nodo, Estimativa),
-    aestrela([[Nodo]/0/Estima], CaminhoInverso/Custo/_),
-    reverseL(CaminhoInverso, Caminho),!.
+
+
+resolveAEstrela(Caminho/Custo) :-
+    inicial(Nodo),
+    pontosrecolha(,,Nodo,,Cap,_),
+    aestrela([[Nodo]/0/pontosrecolha], CaminhoInverso/Custo/),
+    reverseL(CaminhoInverso, Caminho).
 
 aestrela(Caminhos, Caminho) :-
     obtem_melhor(Caminhos, Caminho),
-    Caminho = [Nodo|_]/_/_,final(Nodo).
+    Caminho = [Nodo|_]/_/_,
+    final (Nodo).
 
 aestrela(Caminhos, SolucaoCaminho) :-
     obtem_melhor(Caminhos, MelhorCaminho),
@@ -319,4 +410,3 @@ obtem_melhor([_|Caminhos], MelhorCaminho) :-
 
 expandeAEstrela(Caminho, ExpCaminhos) :-
 findall(NovoCaminho, adjacenteG(Caminho,NovoCaminho), ExpCaminhos). %adjacenteG/2 da Alínea anterior
-
